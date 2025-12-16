@@ -18,6 +18,7 @@ let mediaQuery: MediaQueryList | null = null
 
 onMounted(() => {
   initTheme()
+  loadSettings()
   mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
   mediaQuery.addEventListener('change', (e) => {
     theme.value = e.matches ? 'dark' : 'light'
@@ -32,6 +33,12 @@ onUnmounted(() => {
 
 // Indicator type
 const indicatorType = ref<'circle' | 'square'>('circle')
+
+// Ring color
+const ringColor = ref<'blue' | 'green' | 'red' | 'purple' | 'orange'>('blue')
+
+// Flashing mode for alarm
+const flashingMode = ref<'none' | 'fade' | 'slow' | 'fast'>('none')
 
 // Timer state
 const inputHours = ref(0)
@@ -60,6 +67,52 @@ const formattedTime = computed(() => {
 const canStart = computed(() => {
   if (hasStarted.value) return remainingTime.value > 0
   return inputHours.value > 0 || inputMinutes.value > 0 || inputSeconds.value > 0
+})
+
+// Local storage
+const STORAGE_KEY = 'timer-settings'
+
+interface StoredSettings {
+  indicatorType: 'circle' | 'square'
+  ringColor: 'blue' | 'green' | 'red' | 'purple' | 'orange'
+  flashingMode: 'none' | 'fade' | 'slow' | 'fast'
+  lastTimerHours: number
+  lastTimerMinutes: number
+  lastTimerSeconds: number
+}
+
+function saveSettings() {
+  const settings: StoredSettings = {
+    indicatorType: indicatorType.value,
+    ringColor: ringColor.value,
+    flashingMode: flashingMode.value,
+    lastTimerHours: inputHours.value,
+    lastTimerMinutes: inputMinutes.value,
+    lastTimerSeconds: inputSeconds.value
+  }
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(settings))
+}
+
+function loadSettings() {
+  const stored = localStorage.getItem(STORAGE_KEY)
+  if (stored) {
+    try {
+      const settings: StoredSettings = JSON.parse(stored)
+      indicatorType.value = settings.indicatorType ?? 'circle'
+      ringColor.value = settings.ringColor ?? 'blue'
+      flashingMode.value = settings.flashingMode ?? 'none'
+      inputHours.value = settings.lastTimerHours ?? 0
+      inputMinutes.value = settings.lastTimerMinutes ?? 0
+      inputSeconds.value = settings.lastTimerSeconds ?? 0
+    } catch {
+      // Invalid stored data, use defaults
+    }
+  }
+}
+
+// Watch settings and save to localStorage
+watch([indicatorType, ringColor, flashingMode, inputHours, inputMinutes, inputSeconds], () => {
+  saveSettings()
 })
 
 // Progress calculations
@@ -123,6 +176,7 @@ function startTimer() {
     }
     if (remainingTime.value <= 0) {
       pauseTimer()
+      startAlarm()
     }
   }, 1000)
 }
@@ -150,21 +204,73 @@ function deleteTimer() {
   inputSeconds.value = 0
 }
 
+// Alarm state
+const isAlarming = ref(false)
+let alarmTimeoutId: number | null = null
+let alarmIntervalId: number | null = null
+
+function startAlarm() {
+  if (flashingMode.value === 'none') return
+  isAlarming.value = true
+
+  // All alarm modes run for 10 seconds unless user interacts
+  alarmTimeoutId = window.setTimeout(() => {
+    stopAlarm()
+  }, 10000)
+}
+
+function stopAlarm() {
+  isAlarming.value = false
+  if (alarmTimeoutId !== null) {
+    clearTimeout(alarmTimeoutId)
+    alarmTimeoutId = null
+  }
+  if (alarmIntervalId !== null) {
+    clearInterval(alarmIntervalId)
+    alarmIntervalId = null
+  }
+}
+
+// Stop alarm on any click in the window
+function handleWindowClick() {
+  if (isAlarming.value) {
+    stopAlarm()
+  }
+}
+
 // Cleanup on unmount
 onUnmounted(() => {
   if (intervalId !== null) {
     clearInterval(intervalId)
   }
+  stopAlarm()
 })
 </script>
 
 <template>
-  <div class="app" :class="theme">
+  <div class="app" :class="[theme, ringColor, { alarming: isAlarming, ['alarm-' + flashingMode]: isAlarming }]" @click="handleWindowClick">
     <div class="top-controls">
-      <div class="indicator-select">
+      <div class="setting-select">
         <select v-model="indicatorType">
           <option value="circle">Circle</option>
           <option value="square">Square</option>
+        </select>
+      </div>
+      <div class="setting-select">
+        <select v-model="ringColor">
+          <option value="blue">Blue</option>
+          <option value="green">Green</option>
+          <option value="red">Red</option>
+          <option value="purple">Purple</option>
+          <option value="orange">Orange</option>
+        </select>
+      </div>
+      <div class="setting-select">
+        <select v-model="flashingMode">
+          <option value="none">No Flash</option>
+          <option value="fade">Fade</option>
+          <option value="slow">Slow Flash</option>
+          <option value="fast">Fast Flash</option>
         </select>
       </div>
       <button class="theme-toggle" @click="toggleTheme" :title="`Switch to ${theme === 'light' ? 'dark' : 'light'} mode`">
@@ -426,6 +532,48 @@ html, body {
   filter: drop-shadow(0 0 12px rgba(96, 165, 250, 0.5));
 }
 
+/* Ring colors - Light theme */
+.app.light.blue .progress-fill { stroke: #3b82f6; filter: drop-shadow(0 0 8px rgba(59, 130, 246, 0.4)); }
+.app.light.green .progress-fill { stroke: #22c55e; filter: drop-shadow(0 0 8px rgba(34, 197, 94, 0.4)); }
+.app.light.red .progress-fill { stroke: #ef4444; filter: drop-shadow(0 0 8px rgba(239, 68, 68, 0.4)); }
+.app.light.purple .progress-fill { stroke: #a855f7; filter: drop-shadow(0 0 8px rgba(168, 85, 247, 0.4)); }
+.app.light.orange .progress-fill { stroke: #f97316; filter: drop-shadow(0 0 8px rgba(249, 115, 22, 0.4)); }
+
+/* Ring colors - Dark theme */
+.app.dark.blue .progress-fill { stroke: #60a5fa; filter: drop-shadow(0 0 12px rgba(96, 165, 250, 0.5)); }
+.app.dark.green .progress-fill { stroke: #4ade80; filter: drop-shadow(0 0 12px rgba(74, 222, 128, 0.5)); }
+.app.dark.red .progress-fill { stroke: #f87171; filter: drop-shadow(0 0 12px rgba(248, 113, 113, 0.5)); }
+.app.dark.purple .progress-fill { stroke: #c084fc; filter: drop-shadow(0 0 12px rgba(192, 132, 252, 0.5)); }
+.app.dark.orange .progress-fill { stroke: #fb923c; filter: drop-shadow(0 0 12px rgba(251, 146, 60, 0.5)); }
+
+/* Alarm animations */
+@keyframes fade-alarm {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+@keyframes slow-flash {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.2; }
+}
+
+@keyframes fast-flash {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.2; }
+}
+
+.app.alarming.alarm-fade .indicator-wrapper {
+  animation: fade-alarm 2s ease-in-out infinite;
+}
+
+.app.alarming.alarm-slow .indicator-wrapper {
+  animation: slow-flash 1s steps(2, end) infinite;
+}
+
+.app.alarming.alarm-fast .indicator-wrapper {
+  animation: fast-flash 0.3s steps(2, end) infinite;
+}
+
 /* Top controls */
 .top-controls {
   position: absolute;
@@ -436,7 +584,7 @@ html, body {
   gap: 0.75rem;
 }
 
-.indicator-select select {
+.setting-select select {
   padding: 0.4rem 0.6rem;
   font-size: 0.8rem;
   font-family: 'Inter', sans-serif;
@@ -445,7 +593,7 @@ html, body {
   transition: all 0.2s;
 }
 
-.indicator-select select:focus {
+.setting-select select:focus {
   outline: none;
   border-color: #3b82f6;
 }
