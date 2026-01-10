@@ -472,8 +472,8 @@ onUnmounted(() => {
   --border: #d2d2d7;
   --toggle-bg: #e5e5e5;
   --toggle-knob: #ffffff;
-  --tool-gradient-start: #3b82f6;
-  --tool-gradient-end: #2563eb;
+  --tool-gradient-start: #ff6b6b;
+  --tool-gradient-end: #ee5a5a;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -878,7 +878,7 @@ h1 {
   background: linear-gradient(180deg, var(--tool-gradient-start), var(--tool-gradient-end));
   color: white;
   border: 1px solid rgba(0, 0, 0, 0.1);
-  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.3);
+  box-shadow: 0 2px 8px rgba(255, 107, 107, 0.3);
 }
 
 .btn-danger {
