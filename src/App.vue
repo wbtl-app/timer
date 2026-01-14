@@ -77,6 +77,13 @@ const canStart = computed(() => {
   return inputHours.value > 0 || inputMinutes.value > 0 || inputSeconds.value > 0
 })
 
+// End time calculation
+const endTimeDisplay = computed(() => {
+  if (!isRunning.value || remainingTime.value <= 0) return ''
+  const endTime = new Date(Date.now() + remainingTime.value * 1000)
+  return endTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+})
+
 // Local storage
 const STORAGE_KEY = 'timer-settings'
 
@@ -453,6 +460,9 @@ onUnmounted(() => {
               <button class="btn btn-danger" @click="deleteTimer">
                 Delete
               </button>
+            </div>
+            <div v-if="endTimeDisplay" class="end-time-info">
+              Done at {{ endTimeDisplay }}
             </div>
           </div>
         </div>
@@ -837,6 +847,12 @@ h1 {
 
 .timer-display.finished {
   opacity: 0.4;
+}
+
+.end-time-info {
+  font-size: clamp(0.7rem, 2vw, 1.25rem);
+  opacity: 0.5;
+  margin-top: clamp(0.5rem, 1vw, 1rem);
 }
 
 /* Controls */
