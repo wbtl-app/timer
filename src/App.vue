@@ -58,6 +58,9 @@ const continuousMode = ref(false)
 const untilTimeInput = ref('')
 const showUntilInput = ref(false)
 
+// Config bar collapsed state
+const configCollapsed = ref(false)
+
 // Timer state
 const inputHours = ref(0)
 const inputMinutes = ref(0)
@@ -461,44 +464,51 @@ onUnmounted(() => {
       </div>
     </header>
 
-    <div class="config-bar">
-      <div class="setting-select">
-        <label>Shape</label>
-        <select v-model="indicatorType">
-          <option value="circle">Circle</option>
-          <option value="square">Square</option>
-        </select>
+    <div class="config-bar" :class="{ collapsed: configCollapsed }">
+      <div class="config-bar-content">
+        <div class="setting-select">
+          <label>Shape</label>
+          <select v-model="indicatorType">
+            <option value="circle">Circle</option>
+            <option value="square">Square</option>
+          </select>
+        </div>
+        <div class="setting-select">
+          <label>Color</label>
+          <select v-model="ringColor">
+            <option value="blue">Blue</option>
+            <option value="green">Green</option>
+            <option value="red">Red</option>
+            <option value="purple">Purple</option>
+            <option value="orange">Orange</option>
+          </select>
+        </div>
+        <div class="setting-select">
+          <label>Flash</label>
+          <select v-model="flashingMode">
+            <option value="none">None</option>
+            <option value="fade">Fade</option>
+            <option value="slow">Slow</option>
+            <option value="fast">Fast</option>
+          </select>
+        </div>
+        <div class="setting-select">
+          <label>Sound</label>
+          <select v-model="soundMode">
+            <option value="none">None</option>
+            <option value="beep">Beep</option>
+          </select>
+        </div>
+        <div class="setting-checkbox">
+          <input type="checkbox" id="continuous" v-model="continuousMode" />
+          <label for="continuous">Continuous</label>
+        </div>
       </div>
-      <div class="setting-select">
-        <label>Color</label>
-        <select v-model="ringColor">
-          <option value="blue">Blue</option>
-          <option value="green">Green</option>
-          <option value="red">Red</option>
-          <option value="purple">Purple</option>
-          <option value="orange">Orange</option>
-        </select>
-      </div>
-      <div class="setting-select">
-        <label>Flash</label>
-        <select v-model="flashingMode">
-          <option value="none">None</option>
-          <option value="fade">Fade</option>
-          <option value="slow">Slow</option>
-          <option value="fast">Fast</option>
-        </select>
-      </div>
-      <div class="setting-select">
-        <label>Sound</label>
-        <select v-model="soundMode">
-          <option value="none">None</option>
-          <option value="beep">Beep</option>
-        </select>
-      </div>
-      <div class="setting-checkbox">
-        <input type="checkbox" id="continuous" v-model="continuousMode" />
-        <label for="continuous">Continuous</label>
-      </div>
+      <button class="config-toggle" @click="configCollapsed = !configCollapsed" aria-label="Toggle settings">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" :class="{ rotated: configCollapsed }">
+          <polyline points="6 9 12 15 18 9"></polyline>
+        </svg>
+      </button>
     </div>
 
     <main class="container">
@@ -844,10 +854,70 @@ header {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 1.5rem;
-  padding: 1rem 1.5rem;
   background: var(--bg-secondary);
   border-bottom: 1px solid var(--border);
+  position: relative;
+  padding: 1rem 3rem 1rem 1.5rem;
+}
+
+.config-bar-content {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1.5rem;
+  max-height: 100px;
+  overflow: hidden;
+  opacity: 1;
+  transition: max-height 0.3s ease, opacity 0.2s ease, padding 0.3s ease;
+}
+
+.config-bar.collapsed {
+  padding: 0;
+}
+
+.config-bar.collapsed .config-bar-content {
+  max-height: 0;
+  opacity: 0;
+  padding: 0;
+}
+
+.config-toggle {
+  position: absolute;
+  right: 0.5rem;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-secondary);
+  transition: color 0.2s ease, top 0.3s ease, transform 0.3s ease;
+  z-index: 1;
+}
+
+.config-bar.collapsed .config-toggle {
+  position: relative;
+  top: auto;
+  right: auto;
+  transform: none;
+  margin: 0.25rem auto;
+}
+
+.config-toggle:hover {
+  color: var(--text);
+}
+
+.config-toggle svg {
+  width: 20px;
+  height: 20px;
+  transition: transform 0.3s ease;
+}
+
+.config-toggle svg.rotated {
+  transform: rotate(180deg);
 }
 
 .setting-select {
@@ -1232,15 +1302,22 @@ h1 {
   }
 
   .config-bar {
+    padding: 0.75rem 2.5rem 0.75rem 1rem;
+  }
+
+  .config-bar-content {
     flex-wrap: wrap;
     gap: 0.75rem;
-    padding: 0.75rem 1rem;
   }
 
   .setting-select {
     flex-direction: column;
     align-items: flex-start;
     gap: 0.25rem;
+  }
+
+  .config-toggle {
+    right: 0.25rem;
   }
 }
 
