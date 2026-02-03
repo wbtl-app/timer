@@ -48,6 +48,16 @@ const ringColor = ref<'blue' | 'green' | 'red' | 'purple' | 'orange'>('blue')
 // Flashing mode for alarm
 const flashingMode = ref<'none' | 'fade' | 'slow' | 'fast'>('none')
 
+// Sound alarm mode
+const soundMode = ref<'none' | 'beep'>('none')
+
+// Continuous mode
+const continuousMode = ref(false)
+
+// Until time input mode
+const untilTimeInput = ref('')
+const showUntilInput = ref(false)
+
 // Timer state
 const inputHours = ref(0)
 const inputMinutes = ref(0)
@@ -91,6 +101,8 @@ interface StoredSettings {
   indicatorType: 'circle' | 'square'
   ringColor: 'blue' | 'green' | 'red' | 'purple' | 'orange'
   flashingMode: 'none' | 'fade' | 'slow' | 'fast'
+  soundMode: 'none' | 'beep'
+  continuousMode: boolean
   lastTimerHours: number
   lastTimerMinutes: number
   lastTimerSeconds: number
@@ -101,6 +113,8 @@ function saveSettings() {
     indicatorType: indicatorType.value,
     ringColor: ringColor.value,
     flashingMode: flashingMode.value,
+    soundMode: soundMode.value,
+    continuousMode: continuousMode.value,
     lastTimerHours: inputHours.value,
     lastTimerMinutes: inputMinutes.value,
     lastTimerSeconds: inputSeconds.value
@@ -116,6 +130,8 @@ function loadSettings() {
       indicatorType.value = settings.indicatorType ?? 'circle'
       ringColor.value = settings.ringColor ?? 'blue'
       flashingMode.value = settings.flashingMode ?? 'none'
+      soundMode.value = settings.soundMode ?? 'none'
+      continuousMode.value = settings.continuousMode ?? false
       inputHours.value = settings.lastTimerHours ?? 0
       inputMinutes.value = settings.lastTimerMinutes ?? 0
       inputSeconds.value = settings.lastTimerSeconds ?? 0
@@ -126,7 +142,7 @@ function loadSettings() {
 }
 
 // Watch settings and save to localStorage
-watch([indicatorType, ringColor, flashingMode, inputHours, inputMinutes, inputSeconds], () => {
+watch([indicatorType, ringColor, flashingMode, soundMode, continuousMode, inputHours, inputMinutes, inputSeconds], () => {
   saveSettings()
 })
 
@@ -190,10 +206,24 @@ function startTimer() {
       remainingTime.value--
     }
     if (remainingTime.value <= 0) {
-      pauseTimer()
-      startAlarm()
+      timerFinished()
     }
   }, 1000)
+}
+
+function timerFinished() {
+  pauseTimer()
+  startAlarm()
+
+  // If continuous mode, restart after a brief moment
+  if (continuousMode.value) {
+    window.setTimeout(() => {
+      if (!isRunning.value && continuousMode.value) {
+        remainingTime.value = originalTime.value
+        startTimer()
+      }
+    }, 100)
+  }
 }
 
 function pauseTimer() {
@@ -209,7 +239,7 @@ function resetTimer() {
   remainingTime.value = originalTime.value
 }
 
-function deleteTimer() {
+function clearTimer() {
   pauseTimer()
   hasStarted.value = false
   remainingTime.value = 0
@@ -217,25 +247,141 @@ function deleteTimer() {
   inputHours.value = 0
   inputMinutes.value = 0
   inputSeconds.value = 0
+  showUntilInput.value = false
+  untilTimeInput.value = ''
 }
+
+// Parse "until" time input and calculate seconds until that time
+function parseUntilTime(timeStr: string): number | null {
+  // Parse formats like "16:23:56", "16:23", "4:23 PM"
+  const trimmed = timeStr.trim()
+  if (!trimmed) return null
+
+  let hours = 0
+  let minutes = 0
+  let seconds = 0
+
+  // Try HH:MM:SS or HH:MM format
+  const timeMatch = trimmed.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/)
+  if (timeMatch && timeMatch[1] && timeMatch[2]) {
+    hours = parseInt(timeMatch[1], 10)
+    minutes = parseInt(timeMatch[2], 10)
+    seconds = timeMatch[3] ? parseInt(timeMatch[3], 10) : 0
+  } else {
+    return null
+  }
+
+  // Validate
+  if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59 || seconds < 0 || seconds > 59) {
+    return null
+  }
+
+  const now = new Date()
+  const target = new Date()
+  target.setHours(hours, minutes, seconds, 0)
+
+  // If target time has already passed today, assume tomorrow
+  if (target <= now) {
+    target.setDate(target.getDate() + 1)
+  }
+
+  const diffMs = target.getTime() - now.getTime()
+  return Math.ceil(diffMs / 1000)
+}
+
+function startUntilTimer() {
+  const totalSeconds = parseUntilTime(untilTimeInput.value)
+  if (!totalSeconds || totalSeconds <= 0) return
+
+  // Set the timer values
+  inputHours.value = Math.floor(totalSeconds / 3600)
+  inputMinutes.value = Math.floor((totalSeconds % 3600) / 60)
+  inputSeconds.value = totalSeconds % 60
+
+  originalTime.value = totalSeconds
+  remainingTime.value = totalSeconds
+  hasStarted.value = true
+  showUntilInput.value = false
+
+  // Start immediately
+  startTimer()
+}
+
+// Computed for until time validation
+const canStartUntil = computed(() => {
+  const seconds = parseUntilTime(untilTimeInput.value)
+  return seconds !== null && seconds > 0
+})
 
 // Alarm state
 const isAlarming = ref(false)
 let alarmTimeoutId: number | null = null
 let alarmIntervalId: number | null = null
+let audioContext: AudioContext | null = null
+let beepIntervalId: number | null = null
+
+function createBeep(frequency: number = 800, duration: number = 150) {
+  if (!audioContext) {
+    audioContext = new AudioContext()
+  }
+
+  const oscillator = audioContext.createOscillator()
+  const gainNode = audioContext.createGain()
+
+  oscillator.connect(gainNode)
+  gainNode.connect(audioContext.destination)
+
+  oscillator.frequency.value = frequency
+  oscillator.type = 'sine'
+
+  gainNode.gain.setValueAtTime(0.3, audioContext.currentTime)
+  gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + duration / 1000)
+
+  oscillator.start(audioContext.currentTime)
+  oscillator.stop(audioContext.currentTime + duration / 1000)
+}
+
+function startBeeping() {
+  if (soundMode.value === 'none') return
+
+  // Initial beep
+  createBeep(800, 150)
+
+  // Beep pattern: beep every 500ms
+  beepIntervalId = window.setInterval(() => {
+    createBeep(800, 150)
+  }, 500)
+}
+
+function stopBeeping() {
+  if (beepIntervalId !== null) {
+    clearInterval(beepIntervalId)
+    beepIntervalId = null
+  }
+}
 
 function startAlarm() {
-  if (flashingMode.value === 'none') return
+  const hasFlash = flashingMode.value !== 'none'
+  const hasSound = soundMode.value !== 'none'
+
+  if (!hasFlash && !hasSound) return
+
   isAlarming.value = true
 
-  // All alarm modes run for 10 seconds unless user interacts
+  // Start beeping if sound is enabled
+  if (hasSound) {
+    startBeeping()
+  }
+
+  // All alarm modes run for 5 seconds unless user interacts
   alarmTimeoutId = window.setTimeout(() => {
     stopAlarm()
-  }, 10000)
+  }, 5000)
 }
 
 function stopAlarm() {
   isAlarming.value = false
+  stopBeeping()
   if (alarmTimeoutId !== null) {
     clearTimeout(alarmTimeoutId)
     alarmTimeoutId = null
@@ -334,13 +480,24 @@ onUnmounted(() => {
         </select>
       </div>
       <div class="setting-select">
-        <label>Alarm</label>
+        <label>Flash</label>
         <select v-model="flashingMode">
-          <option value="none">No Flash</option>
+          <option value="none">None</option>
           <option value="fade">Fade</option>
-          <option value="slow">Slow Flash</option>
-          <option value="fast">Fast Flash</option>
+          <option value="slow">Slow</option>
+          <option value="fast">Fast</option>
         </select>
+      </div>
+      <div class="setting-select">
+        <label>Sound</label>
+        <select v-model="soundMode">
+          <option value="none">None</option>
+          <option value="beep">Beep</option>
+        </select>
+      </div>
+      <div class="setting-checkbox">
+        <input type="checkbox" id="continuous" v-model="continuousMode" />
+        <label for="continuous">Continuous</label>
       </div>
     </div>
 
@@ -393,41 +550,73 @@ onUnmounted(() => {
 
           <!-- Input form (shown when timer hasn't started) -->
           <div v-if="!hasStarted" class="input-section">
-            <div class="time-inputs">
-              <div class="input-group">
-                <label for="hours">Hours</label>
-                <input
-                  id="hours"
-                  type="number"
-                  v-model.number="inputHours"
-                  min="0"
-                  max="99"
-                />
+            <!-- Duration input mode -->
+            <div v-if="!showUntilInput" class="duration-mode">
+              <div class="time-inputs">
+                <div class="input-group">
+                  <label for="hours">Hours</label>
+                  <input
+                    id="hours"
+                    type="number"
+                    v-model.number="inputHours"
+                    min="0"
+                    max="99"
+                  />
+                </div>
+                <div class="input-group">
+                  <label for="minutes">Minutes</label>
+                  <input
+                    id="minutes"
+                    type="number"
+                    v-model.number="inputMinutes"
+                    min="0"
+                    max="59"
+                  />
+                </div>
+                <div class="input-group">
+                  <label for="seconds">Seconds</label>
+                  <input
+                    id="seconds"
+                    type="number"
+                    v-model.number="inputSeconds"
+                    min="0"
+                    max="59"
+                  />
+                </div>
               </div>
-              <div class="input-group">
-                <label for="minutes">Minutes</label>
-                <input
-                  id="minutes"
-                  type="number"
-                  v-model.number="inputMinutes"
-                  min="0"
-                  max="59"
-                />
-              </div>
-              <div class="input-group">
-                <label for="seconds">Seconds</label>
-                <input
-                  id="seconds"
-                  type="number"
-                  v-model.number="inputSeconds"
-                  min="0"
-                  max="59"
-                />
+              <div class="input-buttons">
+                <button class="btn btn-primary" @click="startTimer" :disabled="!canStart">
+                  Start
+                </button>
+                <button class="btn btn-secondary" @click="showUntilInput = true">
+                  Until...
+                </button>
               </div>
             </div>
-            <button class="btn btn-primary" @click="startTimer" :disabled="!canStart">
-              Start
-            </button>
+
+            <!-- Until time input mode -->
+            <div v-else class="until-mode">
+              <div class="until-input-group">
+                <label for="until-time">End at time</label>
+                <input
+                  id="until-time"
+                  type="text"
+                  v-model="untilTimeInput"
+                  placeholder="16:30:00"
+                  class="until-input"
+                  @keyup.enter="startUntilTimer"
+                />
+                <span class="until-hint">Format: HH:MM or HH:MM:SS</span>
+              </div>
+              <div class="input-buttons">
+                <button class="btn btn-primary" @click="startUntilTimer" :disabled="!canStartUntil">
+                  Start
+                </button>
+                <button class="btn btn-secondary" @click="showUntilInput = false; untilTimeInput = ''">
+                  Duration...
+                </button>
+              </div>
+            </div>
           </div>
 
           <!-- Timer display (shown when timer has started) -->
@@ -438,17 +627,17 @@ onUnmounted(() => {
             <div class="controls">
               <button
                 v-if="!isRunning && remainingTime > 0"
-                class="btn btn-primary"
+                class="btn btn-success"
                 @click="startTimer"
               >
                 {{ remainingTime === originalTime ? 'Start' : 'Resume' }}
               </button>
               <button
                 v-if="isRunning"
-                class="btn btn-secondary"
+                class="btn btn-stop"
                 @click="pauseTimer"
               >
-                Pause
+                Stop
               </button>
               <button
                 class="btn btn-secondary"
@@ -457,8 +646,8 @@ onUnmounted(() => {
               >
                 Reset
               </button>
-              <button class="btn btn-danger" @click="deleteTimer">
-                Delete
+              <button class="btn btn-danger" @click="clearTimer">
+                Clear
               </button>
             </div>
             <div v-if="endTimeDisplay" class="end-time-info">
@@ -692,6 +881,28 @@ header {
   border-color: var(--accent);
 }
 
+.setting-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.setting-checkbox input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+  accent-color: var(--accent);
+}
+
+.setting-checkbox label {
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  cursor: pointer;
+}
+
 /* Main container */
 .container {
   flex: 1;
@@ -765,8 +976,8 @@ header {
 }
 
 h1 {
-  font-size: clamp(1.25rem, 4vw, 4rem);
-  margin-bottom: clamp(0.75rem, 2vw, 3rem);
+  font-size: clamp(1.25rem, min(4vw, 5vh), 4rem);
+  margin-bottom: clamp(0.75rem, min(2vw, 3vh), 3rem);
   font-weight: 500;
   letter-spacing: -0.02em;
   opacity: 0.9;
@@ -830,6 +1041,66 @@ h1 {
   -moz-appearance: textfield;
 }
 
+/* Duration and Until modes */
+.duration-mode,
+.until-mode {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: clamp(0.75rem, 3vw, 3rem);
+}
+
+.input-buttons {
+  display: flex;
+  gap: clamp(0.5rem, 2vw, 1.5rem);
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+/* Until time input */
+.until-input-group {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: clamp(0.25rem, 0.5vw, 0.75rem);
+}
+
+.until-input-group label {
+  font-size: clamp(0.6rem, 1.5vw, 1.5rem);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  opacity: 0.6;
+}
+
+.until-input {
+  width: clamp(150px, 40vw, 400px);
+  padding: clamp(0.4rem, 2vw, 1.5rem);
+  font-size: clamp(1rem, 4vw, 3rem);
+  font-family: 'JetBrains Mono', monospace;
+  text-align: center;
+  border-radius: clamp(0.5rem, 1vw, 1rem);
+  transition: all 0.2s;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+}
+
+.until-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+}
+
+.until-input::placeholder {
+  opacity: 0.4;
+}
+
+.until-hint {
+  font-size: clamp(0.5rem, 1.2vw, 1rem);
+  opacity: 0.4;
+}
+
 /* Timer display */
 .timer-section {
   display: flex;
@@ -839,7 +1110,7 @@ h1 {
 }
 
 .timer-display {
-  font-size: clamp(2.5rem, 12vw, 12rem);
+  font-size: clamp(2.5rem, min(12vw, 16vh), 12rem);
   font-family: 'JetBrains Mono', monospace;
   font-weight: 500;
   letter-spacing: -0.02em;
@@ -898,6 +1169,20 @@ h1 {
 }
 
 .btn-danger {
+  background: linear-gradient(180deg, #ef4444, #dc2626);
+  color: white;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  box-shadow: 0 2px 8px rgba(220, 38, 38, 0.3);
+}
+
+.btn-success {
+  background: linear-gradient(180deg, #22c55e, #16a34a);
+  color: white;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  box-shadow: 0 2px 8px rgba(34, 197, 94, 0.3);
+}
+
+.btn-stop {
   background: linear-gradient(180deg, #ef4444, #dc2626);
   color: white;
   border: 1px solid rgba(0, 0, 0, 0.1);
