@@ -464,8 +464,8 @@ onUnmounted(() => {
       </div>
     </header>
 
-    <div class="config-bar" :class="{ collapsed: configCollapsed }">
-      <div class="config-bar-content">
+    <div class="config-section" :class="{ collapsed: configCollapsed }">
+      <div class="config-bar">
         <div class="setting-select">
           <label>Shape</label>
           <select v-model="indicatorType">
@@ -505,6 +505,7 @@ onUnmounted(() => {
         </div>
       </div>
       <button class="config-toggle" @click="configCollapsed = !configCollapsed" aria-label="Toggle settings">
+        <span v-if="configCollapsed" class="config-toggle-label">Options</span>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" :class="{ rotated: configCollapsed }">
           <polyline points="6 9 12 15 18 9"></polyline>
         </svg>
@@ -849,61 +850,57 @@ header {
   }
 }
 
-/* Config Bar */
+/* Config Section */
+.config-section {
+  position: relative;
+  z-index: 10;
+}
+
 .config-bar {
   display: flex;
   align-items: center;
   justify-content: center;
+  gap: 1.5rem;
+  padding: 1rem 3rem 1rem 1.5rem;
   background: var(--bg-secondary);
   border-bottom: 1px solid var(--border);
-  position: relative;
-  padding: 1rem 3rem 1rem 1.5rem;
-}
-
-.config-bar-content {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 1.5rem;
-  max-height: 100px;
   overflow: hidden;
+  max-height: 100px;
   opacity: 1;
-  transition: max-height 0.3s ease, opacity 0.2s ease, padding 0.3s ease;
+  transition: max-height 0.3s ease, opacity 0.2s ease, padding 0.3s ease, border-color 0.3s ease;
 }
 
-.config-bar.collapsed {
-  padding: 0;
-}
-
-.config-bar.collapsed .config-bar-content {
+.config-section.collapsed .config-bar {
   max-height: 0;
-  opacity: 0;
   padding: 0;
+  opacity: 0;
+  border-bottom-color: transparent;
 }
 
 .config-toggle {
   position: absolute;
   right: 0.5rem;
-  top: 50%;
-  transform: translateY(-50%);
+  top: 0;
+  height: 100%;
   background: none;
   border: none;
   cursor: pointer;
-  padding: 0.5rem;
+  padding: 0 0.5rem;
   display: flex;
   align-items: center;
-  justify-content: center;
+  gap: 0.35rem;
   color: var(--text-secondary);
-  transition: color 0.2s ease, top 0.3s ease, transform 0.3s ease;
+  transition: color 0.2s ease;
   z-index: 1;
 }
 
-.config-bar.collapsed .config-toggle {
-  position: relative;
-  top: auto;
-  right: auto;
-  transform: none;
-  margin: 0.25rem auto;
+.config-section.collapsed .config-toggle {
+  height: auto;
+  padding: 0.3rem 0.6rem;
+  background: var(--bg-secondary);
+  border-radius: 0 0 0.5rem 0.5rem;
+  border: 1px solid var(--border);
+  border-top: none;
 }
 
 .config-toggle:hover {
@@ -911,13 +908,20 @@ header {
 }
 
 .config-toggle svg {
-  width: 20px;
-  height: 20px;
+  width: 18px;
+  height: 18px;
   transition: transform 0.3s ease;
 }
 
 .config-toggle svg.rotated {
   transform: rotate(180deg);
+}
+
+.config-toggle-label {
+  font-size: 0.7rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
 
 .setting-select {
@@ -1302,12 +1306,9 @@ h1 {
   }
 
   .config-bar {
-    padding: 0.75rem 2.5rem 0.75rem 1rem;
-  }
-
-  .config-bar-content {
     flex-wrap: wrap;
     gap: 0.75rem;
+    padding: 0.75rem 2.5rem 0.75rem 1rem;
   }
 
   .setting-select {
