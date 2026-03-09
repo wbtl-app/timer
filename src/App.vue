@@ -106,6 +106,7 @@ interface StoredSettings {
   flashingMode: 'none' | 'fade' | 'slow' | 'fast'
   soundMode: 'none' | 'beep'
   continuousMode: boolean
+  configCollapsed: boolean
   lastTimerHours: number
   lastTimerMinutes: number
   lastTimerSeconds: number
@@ -118,6 +119,7 @@ function saveSettings() {
     flashingMode: flashingMode.value,
     soundMode: soundMode.value,
     continuousMode: continuousMode.value,
+    configCollapsed: configCollapsed.value,
     lastTimerHours: inputHours.value,
     lastTimerMinutes: inputMinutes.value,
     lastTimerSeconds: inputSeconds.value
@@ -135,6 +137,7 @@ function loadSettings() {
       flashingMode.value = settings.flashingMode ?? 'none'
       soundMode.value = settings.soundMode ?? 'none'
       continuousMode.value = settings.continuousMode ?? false
+      configCollapsed.value = settings.configCollapsed ?? false
       inputHours.value = settings.lastTimerHours ?? 0
       inputMinutes.value = settings.lastTimerMinutes ?? 0
       inputSeconds.value = settings.lastTimerSeconds ?? 0
@@ -145,7 +148,7 @@ function loadSettings() {
 }
 
 // Watch settings and save to localStorage
-watch([indicatorType, ringColor, flashingMode, soundMode, continuousMode, inputHours, inputMinutes, inputSeconds], () => {
+watch([indicatorType, ringColor, flashingMode, soundMode, continuousMode, configCollapsed, inputHours, inputMinutes, inputSeconds], () => {
   saveSettings()
 })
 
